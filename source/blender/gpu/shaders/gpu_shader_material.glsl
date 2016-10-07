@@ -1414,18 +1414,20 @@ void mtex_image_refl(vec3 I, vec4 camerafac, vec3 texco, sampler2D ima, float lo
 	vec3 viewdirection = vec3(viewmatrixinverse * vec4(vp, 0.0));
 	vec3 normaldirection = normalize(viewmatrixinverse * vec4(vn, 0.0)).xyz;
 
-	//vec2 uv = gl_FragCoord.xy / vec2(textureSize(ima, 0));
 	vec4 projvec = gl_ProjectionMatrix * vec4(I, 1.0);
 	vec3 window = vec3(mtex_2d_mapping(projvec.xyz / projvec.w).xy * camerafac.xy + camerafac.zw, 0.0);
 
-	vec3 Z  = normalize(vec3(viewmatrix*objectmatrix*vec4(0.0, 0.0, 1.0, 0.0)));
-	//vec3 reflecteddirection = reflect(viewdirection, normaldirection) - reflect(viewdirection, Z);
+	vec3 Z  = normalize(vec3(viewmatrix * objectmatrix * vec4( 0.0, 0.0, 1.0, 0.0)));
+	
 	vec3 reflecteddirection = reflect(vp, vn) - reflect(vp, Z);
-	vec2 uv = window.xy + vec2(reflecteddirection.x,reflecteddirection.y) * 0.25;
 
-	color = texture2D(ima, window.xy, lodbias);//*0.001+vec4(reflecteddirection.yyy,1.0);
+	// 0.25 is an artistic constant, normal map distortion needs to be scaled down to give proper results
+	vec2 uv = window.xy + vec2(reflecteddirection.x, reflecteddirection.y) * 0.25;
+
+	color = texture2D(ima, uv, lodbias);
 	value = 1.0;
 }
+
 
 void mtex_normal(vec3 texco, sampler2D ima, float lodbias, out vec3 normal)
 {

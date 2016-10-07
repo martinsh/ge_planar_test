@@ -1397,9 +1397,18 @@ static void do_material_tex(GPUShadeInput *shi)
 							GPU_builtin(GPU_INVERSE_VIEW_MATRIX),
 							shi->view, shi->vn, &tin, &trgb);
 					}
+					/* using same shader for planar reflection and refraction */
 					else if (tex->planarflag & TEX_PLANAR_REFRACTION) {
-						GPU_link(mat, "mtex_image", texco, GPU_image(tex->ima, &tex->iuser, false),
-							GPU_select_uniform(&mtex->lodbias, GPU_DYNAMIC_TEX_LODBIAS, NULL, ma), &tin, &trgb);
+						GPU_link(mat, "mtex_image_refl",
+							GPU_builtin(GPU_VIEW_POSITION),
+							GPU_builtin(GPU_CAMERA_TEXCO_FACTORS),
+							texco,
+							GPU_image(tex->ima, &tex->iuser, false),
+							GPU_select_uniform(&mtex->lodbias, GPU_DYNAMIC_TEX_LODBIAS, NULL, ma),
+							GPU_builtin(GPU_OBJECT_MATRIX),
+							GPU_builtin(GPU_VIEW_MATRIX),
+							GPU_builtin(GPU_INVERSE_VIEW_MATRIX),
+							shi->view, shi->vn, &tin, &trgb);
 					}
 					else {
 						GPU_link(mat, "mtex_image", texco, GPU_image(tex->ima, &tex->iuser, false),

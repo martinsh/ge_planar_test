@@ -929,7 +929,7 @@ class TEXTURE_PT_ocean(TextureTypePanel, Panel):
         col.prop(ot, "output")
 
 class TEXTURE_PT_image_planar(TextureTypePanel, Panel):
-    bl_label = "Planar Refle/ractions"
+    bl_label = "Planar Reflection / Refraction"
     bl_options = {'DEFAULT_CLOSED'}
     tex_type = 'IMAGE'
     COMPAT_ENGINES = {'BLENDER_GAME'}

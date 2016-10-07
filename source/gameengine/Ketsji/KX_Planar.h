@@ -79,6 +79,7 @@ public:
 
 	KX_GameObject *GetMirrorObject() const;
 
+
 	float GetClipStart() const;
 	float GetClipEnd() const;
 	void SetClipStart(float start);
@@ -98,6 +99,7 @@ public:
 
 	short GetWidth();
 	short GetHeight();
+	int GetPlanarType();
 
 #ifdef WITH_PYTHON
 	KX_PYMETHOD_DOC_NOARGS(KX_Planar, update);

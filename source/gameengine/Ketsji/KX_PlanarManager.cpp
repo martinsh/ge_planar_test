@@ -38,6 +38,8 @@
 
 #include "DNA_texture_types.h"
 
+#include "glew-mx.h"
+
 KX_PlanarManager::KX_PlanarManager(KX_Scene *scene)
 	:m_scene(scene)
 {
@@ -80,12 +82,13 @@ void KX_PlanarManager::RenderPlanar(RAS_IRasterizer *rasty, KX_Planar *planar)
 	KX_GameObject *mirror = planar->GetMirrorObject();
 	KX_GameObject *observer = m_scene->GetActiveCamera();
 
+
+
 	//// Doesn't need (or can) update.
 	//if (!planar->NeedUpdate() || !planar->GetEnabled() || !mirror) {
 	//	return;
 	//}
 
-	
 	//RAS_FrameFrustum frustum;
 
 	// mirror mode, compute camera frustum, position and orientation
@@ -107,50 +110,57 @@ void KX_PlanarManager::RenderPlanar(RAS_IRasterizer *rasty, KX_Planar *planar)
 		std::cout << "don't render, object on the wrong side of the mirror" << std::endl;
 		return;
 	}
-	// set camera world position = observerPos + normal * 2 * distance
-	MT_Vector3 cameraWorldPos = observerWorldPos +(MT_Scalar(2.0)*observerDistance)*mirrorWorldZ;
-	m_camera->GetSGNode()->SetLocalPosition(cameraWorldPos);
+
 	// set camera orientation: z=normal, y=mirror_up in world space, x= y x z
 	MT_Vector3 mirrorWorldY = mirrorObjWorldOri * planar->GetMirrorY();
 	MT_Vector3 mirrorWorldX = mirrorObjWorldOri * planar->GetMirrorX();
-	MT_Matrix3x3 cameraWorldOri(
-		mirrorWorldX[0], mirrorWorldY[0], mirrorWorldZ[0],
-		mirrorWorldX[1], mirrorWorldY[1], mirrorWorldZ[1],
-		mirrorWorldX[2], mirrorWorldY[2], mirrorWorldZ[2]);
-	m_camera->GetSGNode()->SetLocalOrientation(cameraWorldOri);
+
+	MT_Matrix3x3 m1 = mirror->NodeGetWorldOrientation();
+	MT_Matrix3x3 m2 = m1;
+	m2.invert();
+
+	MT_Matrix3x3 r180;
+	r180[0][0] = -1;
+	r180[0][1] = 0;
+	r180[0][2] = 0;
+	r180[1][0] = 0;
+	r180[1][1] = 1;
+	r180[1][2] = 0;
+	r180[2][0] = 0;
+	r180[2][1] = 0;
+	r180[2][2] = -1;
+
+	MT_Matrix3x3 unmir;
+	unmir[0][0] = -1;
+	unmir[0][1] = 0;
+	unmir[0][2] = 0;
+	unmir[1][0] = 0;
+	unmir[1][1] = 1;
+	unmir[1][2] = 0;
+	unmir[2][0] = 0;
+	unmir[2][1] = 0;
+	unmir[2][2] = 1;
+
+
+	MT_Matrix3x3 ori = observer->NodeGetWorldOrientation();
+	MT_Vector3 cameraWorldPos = observerWorldPos;
+	
+	int reflection = 0; // temporary solution, to be removed
+
+	if (planar->GetPlanarType() & TEX_PLANAR_REFLECTION) {
+	//if (reflection == 1) {
+		cameraWorldPos = (observerWorldPos - mirror->GetSGNode()->GetWorldPosition())*m1;
+		cameraWorldPos = mirror->GetSGNode()->GetWorldPosition() + cameraWorldPos*r180*unmir*m2;
+		ori.transpose();
+		ori = ori*m1*r180*unmir*m2;
+		ori.transpose();
+	}
+
+	m_camera->GetSGNode()->SetLocalPosition(cameraWorldPos);
+	m_camera->GetSGNode()->SetLocalOrientation(ori);
+
 	m_camera->GetSGNode()->UpdateWorldData(0.0);
-	// compute camera frustum:
-	//   get position of mirror relative to camera: offset = mirrorPos-cameraPos
-	//MT_Vector3 mirrorOffset = mirrorWorldPos - cameraWorldPos;
-	//   convert to camera orientation
-	//mirrorOffset = mirrorOffset * cameraWorldOri;
-	//   scale mirror size to world scale:
-	//     get closest local axis for mirror Y and X axis and scale height and width by local axis scale
-	//MT_Scalar x, y;
-	//x = fabs(planar->GetMirrorY()[0]);
-	//y = fabs(planar->GetMirrorY()[1]);
-	//float height = (x > y) ?
-	//	((x > fabs(planar->GetMirrorY()[2])) ? mirrorObjWorldScale[0] : mirrorObjWorldScale[2]) :
-	//	((y > fabs(planar->GetMirrorY()[2])) ? mirrorObjWorldScale[1] : mirrorObjWorldScale[2]);
-	//x = fabs(planar->GetMirrorX()[0]);
-	//y = fabs(planar->GetMirrorX()[1]);
-	//float width = (x > y) ?
-	//	((x > fabs(planar->GetMirrorX()[2])) ? mirrorObjWorldScale[0] : mirrorObjWorldScale[2]) :
-	//	((y > fabs(planar->GetMirrorX()[2])) ? mirrorObjWorldScale[1] : mirrorObjWorldScale[2]);
-	//width *= planar->GetMirrorHalfWidth();
-	//height *= planar->GetMirrorHalfHeight();
-	//   left = offsetx-width
-	//   right = offsetx+width
-	//   top = offsety+height
-	//   bottom = offsety-height
-	//   near = -offsetz
-	//   far = near+100
-	//frustum.x1 = mirrorOffset[0] - width;
-	//frustum.x2 = mirrorOffset[0] + width;
-	//frustum.y1 = mirrorOffset[1] - height;
-	//frustum.y2 = mirrorOffset[1] + height;
-	//frustum.camnear = -mirrorOffset[2] + m_camera->GetCameraData()->m_clipstart;
-	//frustum.camfar = -mirrorOffset[2] + m_camera->GetCameraData()->m_clipend;
+	
 
 	// Store settings to be restored later
 	const RAS_IRasterizer::StereoMode stereomode = rasty->GetStereoMode();
@@ -158,6 +168,27 @@ void KX_PlanarManager::RenderPlanar(RAS_IRasterizer *rasty, KX_Planar *planar)
 
 	// The screen area that ImageViewport will copy is also the rendering zone
 	// bind the fbo and set the viewport to full size
+
+	// initializing clipping planes for reflection and refraction
+	float offset = 0.1; //geometry clipping offset
+	double plane1[4] = { mirrorWorldZ[0], mirrorWorldZ[1], mirrorWorldZ[2], mirrorPlaneDTerm + offset };
+	double plane2[4] = { mirrorWorldZ[0], mirrorWorldZ[1], mirrorWorldZ[2], -mirrorPlaneDTerm + offset };
+
+
+	mirror->SetVisible(false, true);
+
+	if (planar->GetPlanarType() & TEX_PLANAR_REFLECTION) {
+	//if (reflection == 1) {
+		glClipPlane(GL_CLIP_PLANE0, plane2);
+		glEnable(GL_CLIP_PLANE0);
+		glFrontFace(GL_CW);
+	}
+	else{
+		glClipPlane(GL_CLIP_PLANE0, plane1);
+		glEnable(GL_CLIP_PLANE0);
+	}
+
+
 	planar->BeginRender();
 	planar->BindFace(rasty);
 
@@ -181,14 +212,14 @@ void KX_PlanarManager::RenderPlanar(RAS_IRasterizer *rasty, KX_Planar *planar)
 	//MT_Matrix4x4 viewmat = m_scene->GetActiveCamera()->GetModelviewMatrix();
 
 	m_camera->SetProjectionMatrix(projmat);
-	m_camera->SetModelviewMatrix(m_scene->GetActiveCamera()->GetModelviewMatrix());
+
 
 	MT_Transform camtrans(m_camera->GetWorldToCamera());
 	MT_Matrix4x4 viewmat(camtrans);
 
 	rasty->SetViewMatrix(viewmat, m_camera->NodeGetWorldOrientation(), m_camera->NodeGetWorldPosition(), m_camera->NodeGetLocalScaling(), m_camera->GetCameraData()->m_perspective);
+	m_camera->SetModelviewMatrix(viewmat);
 
-	
 
 
 	m_scene->CalculateVisibleMeshes(rasty, m_camera);
@@ -205,6 +236,18 @@ void KX_PlanarManager::RenderPlanar(RAS_IRasterizer *rasty, KX_Planar *planar)
 	KX_GetActiveEngine()->GetCanvas()->EndFrame();
 
 	planar->EndRender();
+
+	//glCullFace(GL_BACK);
+	
+	mirror->SetVisible(true, true);
+	glDisable(GL_CLIP_PLANE0);
+	if (planar->GetPlanarType() & TEX_PLANAR_REFLECTION) {
+	//if (reflection == 1) {
+		glFrontFace(GL_CCW);
+		
+	}
+
+	
 }
 
 void KX_PlanarManager::Render(RAS_IRasterizer *rasty)

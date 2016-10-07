@@ -113,6 +113,11 @@ void KX_Planar::SetClipEnd(float end)
 	m_clipEnd = end;
 }
 
+int KX_Planar::GetPlanarType()
+{
+	return m_type;
+}
+
 bool KX_Planar::NeedUpdate()
 {
 	bool result = m_autoUpdate || m_forceUpdate;
@@ -131,6 +136,7 @@ short KX_Planar::CalcSize(short size)
 	return size;
 }
 
+
 short KX_Planar::GetWidth()
 {
 	return m_width;
@@ -140,6 +146,7 @@ short KX_Planar::GetHeight()
 {
 	return m_height;
 }
+
 
 #ifdef WITH_PYTHON
 
